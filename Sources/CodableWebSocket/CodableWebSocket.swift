@@ -16,23 +16,36 @@ public enum SocketData<T:Codable> {
 }
 
 public final class CodableWebSocket<T:Codable>:Publisher,Subscriber {
-  
+
     public typealias Output = Result<SocketData<T>,Error>
-    public typealias Input =  SocketData<T>
+    public typealias Input = SocketData<T>
     public typealias Failure = Error
-    let webSocketTask:URLSessionWebSocketTask
-    public var combineIdentifier: CombineIdentifier = CombineIdentifier()
-    
-    public init(url:URL)
-    {
-        let urlSession = URLSession(configuration: .default)
-        webSocketTask = urlSession.webSocketTask(with:url)
+    let webSocketTask: URLSessionWebSocketTask
+    public var combineIdentifier = CombineIdentifier()
+
+    public convenience init(urlRequest: URLRequest, session: URLSession? = nil) {
+        let urlSession = session ?? .shared
+        self.init(webSocketTask: urlSession.webSocketTask(with: urlRequest))
+    }
+
+    public convenience init(url: URL, session: URLSession? = nil) {
+        let urlSession = session ?? .shared
+        self.init(webSocketTask: urlSession.webSocketTask(with: url))
+    }
+
+    public convenience init(url: URL, protocols: [String] = [], session: URLSession? = nil) {
+        let urlSession = session ?? .shared
+        self.init(webSocketTask: urlSession.webSocketTask(with: url, protocols: protocols))
+    }
+
+    private init(webSocketTask: URLSessionWebSocketTask) {
+        self.webSocketTask = webSocketTask
         webSocketTask.resume()
     }
     
     // MARK: Publisher
     
-    public func receive<S>(subscriber: S) where S : Subscriber, CodableWebSocket.Failure == S.Failure, CodableWebSocket.Output == S.Input {
+    public func receive<S>(subscriber: S) where S: Subscriber, CodableWebSocket.Failure == S.Failure, CodableWebSocket.Output == S.Input {
         let subscription = CodableWebsocketSubscription(subscriber: subscriber, socket:webSocketTask)
         subscriber.receive(subscription: subscription)
     }
@@ -60,7 +73,7 @@ public final class CodableWebSocket<T:Codable>:Publisher,Subscriber {
         case .uncodable(let data):
             message = URLSessionWebSocketTask.Message.data(data)
         }
-    
+
         webSocketTask.send(message, completionHandler: {
             error in
             if let error = error {
@@ -83,7 +96,7 @@ extension CodableWebSocket {
     public func codable()-> AnyPublisher<T, CodableWebSocket<T>.Failure> {
         return compactMap{ result -> T? in
             guard case  Result<SocketData<T>,Error>.success(let socketdata) = result,
-                case SocketData.codable(let codable) = socketdata
+                  case SocketData.codable(let codable) = socketdata
             else { return nil }
             return codable
         }.eraseToAnyPublisher()
