@@ -10,7 +10,7 @@ import Foundation
 import Combine
 import OSLog
 
-final class CodableWebsocketSubscription<SubscriberType: Subscriber, T: Codable>: Subscription where SubscriberType.Input == Result<SocketData<T>, Error>, SubscriberType.Failure == Error {
+final class CodableWebsocketSubscription<SubscriberType: Subscriber, IncomingType: Decodable>: Subscription where SubscriberType.Input == Result<SocketData<IncomingType>, Error>, SubscriberType.Failure == Error {
 
     private var subscriber: SubscriberType?
     let webSocketTask: URLSessionWebSocketTask
@@ -37,13 +37,13 @@ final class CodableWebsocketSubscription<SubscriberType: Subscriber, T: Codable>
     }
 
     private func handle(result: Result<URLSessionWebSocketTask.Message, Error>) {
-        let newResult = result.map { message -> SocketData<T> in
+        let newResult = result.map { message -> SocketData<IncomingType> in
             switch message {
             case .string(let str):
                 return .message(str)
             case .data(let data):
                 do {
-                    let decoded = try JSONDecoder().decode(T.self, from: data)
+                    let decoded = try JSONDecoder().decode(IncomingType.self, from: data)
                     return .codable(decoded)
                 } catch {
                     os_log(.error, log: .module, "Error during decoding websocket message: %@", error.description)

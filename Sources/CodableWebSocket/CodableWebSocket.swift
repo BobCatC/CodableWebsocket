@@ -10,16 +10,16 @@ import Foundation
 import Combine
 import OSLog
 
-public enum SocketData<T:Codable> {
+public enum SocketData<T> {
     case message(String)
     case codable(T)
     case uncodable(Data)
 }
 
-public final class CodableWebSocket<T:Codable>:Publisher,Subscriber {
+public final class CodableWebSocket<IncomingType: Decodable, OutgoingType: Encodable>: Publisher, Subscriber {
 
-    public typealias Output = Result<SocketData<T>,Error>
-    public typealias Input = SocketData<T>
+    public typealias Output = Result<SocketData<IncomingType>, Error>
+    public typealias Input = SocketData<OutgoingType>
     public typealias Failure = Error
     let webSocketTask: URLSessionWebSocketTask
     public var combineIdentifier = CombineIdentifier()
@@ -57,7 +57,7 @@ public final class CodableWebSocket<T:Codable>:Publisher,Subscriber {
         subscription.request(.unlimited)
     }
 
-    public func receive(_ input: SocketData<T>) -> Subscribers.Demand {
+    public func receive(_ input: SocketData<OutgoingType>) -> Subscribers.Demand {
         let message: URLSessionWebSocketTask.Message
         
         switch input {
@@ -91,8 +91,8 @@ public final class CodableWebSocket<T:Codable>:Publisher,Subscriber {
 }
 
 extension CodableWebSocket {
-    public func codable()-> AnyPublisher<T, CodableWebSocket<T>.Failure> {
-        return compactMap { result -> T? in
+    public func codable()-> AnyPublisher<IncomingType, CodableWebSocket<IncomingType, OutgoingType>.Failure> {
+        return compactMap { result -> IncomingType? in
             guard case .success(let socketdata) = result,
                   case .codable(let codable) = socketdata
             else { return nil }
