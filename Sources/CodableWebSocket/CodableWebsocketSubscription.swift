@@ -8,13 +8,14 @@
 
 import Foundation
 import Combine
+import OSLog
 
-final class CodableWebsocketSubscription<SubscriberType: Subscriber, T: Codable>: Subscription where SubscriberType.Input == Result<SocketData<T>,Error>,SubscriberType.Failure == Error {
+final class CodableWebsocketSubscription<SubscriberType: Subscriber, T: Codable>: Subscription where SubscriberType.Input == Result<SocketData<T>, Error>, SubscriberType.Failure == Error {
+
     private var subscriber: SubscriberType?
+    let webSocketTask: URLSessionWebSocketTask
 
-    let webSocketTask:URLSessionWebSocketTask
-
-    init(subscriber: SubscriberType, socket:URLSessionWebSocketTask) {
+    init(subscriber: SubscriberType, socket: URLSessionWebSocketTask) {
         self.subscriber = subscriber
         webSocketTask = socket
         receive()
@@ -28,45 +29,39 @@ final class CodableWebsocketSubscription<SubscriberType: Subscriber, T: Codable>
         subscriber = nil
     }
 
-    func receive()
-       {
+    func receive() {
         webSocketTask
-            .receive
-           {[weak self] result in
-            let newResult:Result<SocketData<T>,Error> =  result.map { message in
-                
-                                                                        switch message
-                                                                        {
-                                                                        case .string(let str):
-                                                                            return SocketData<T>.message(str)
-                                                                        case .data(let data):
-                                                                            if  let thing = try? JSONDecoder().decode(T.self, from: data)
-                                                                            {
-                                                                                return .codable(thing)
-                                                                            }
-                                                                            else
-                                                                            {
-                                                                                return .uncodable(data)
-                                                                            }
-                                                                            
-                                                                        @unknown default:
-                                                                            fatalError()
-                                                                        }
-                                                                        
-                                                                    }
-                                                                    
-            
-            if case Result.failure(let error) = newResult, self?.webSocketTask.closeCode != .invalid {
-                self?.subscriber?.receive(completion:Subscribers.Completion.failure(error))
+            .receive { [weak self] result in
+                self?.handle(result: result)
             }
-            else {
-                _ = self?.subscriber?.receive(newResult)
-            }
-            
-            self?.receive()
-            
-           }
-  
-       }
-}
+    }
 
+    private func handle(result: Result<URLSessionWebSocketTask.Message, Error>) {
+        let newResult = result.map { message -> SocketData<T> in
+            switch message {
+            case .string(let str):
+                return .message(str)
+            case .data(let data):
+                do {
+                    let decoded = try JSONDecoder().decode(T.self, from: data)
+                    return .codable(decoded)
+                } catch {
+                    os_log(.error, log: .module, "Error during decoding websocket message: %@", error.description)
+                    return .uncodable(data)
+                }
+
+            @unknown default:
+                fatalError()
+            }
+        }
+
+        if case Result.failure(let error) = newResult, webSocketTask.closeCode != .invalid {
+            subscriber?.receive(completion: .failure(error))
+        }
+        else {
+            _ = subscriber?.receive(newResult)
+        }
+
+        receive()
+    }
+}

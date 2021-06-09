@@ -8,6 +8,7 @@
 
 import Foundation
 import Combine
+import OSLog
 
 public enum SocketData<T:Codable> {
     case message(String)
@@ -57,32 +58,30 @@ public final class CodableWebSocket<T:Codable>:Publisher,Subscriber {
     }
 
     public func receive(_ input: SocketData<T>) -> Subscribers.Demand {
-        let message:URLSessionWebSocketTask.Message
+        let message: URLSessionWebSocketTask.Message
         
         switch input {
-        
         case .message(let string):
             message = URLSessionWebSocketTask.Message.string(string)
         case .codable(let codable):
-            if let data = try? JSONEncoder().encode(codable) {
+            do {
+                let data = try JSONEncoder().encode(codable)
                 message = URLSessionWebSocketTask.Message.data(data)
+            } catch {
+                os_log(.error, log: .module, "Error during encoding WebSocket message: %@", error.description)
+                assertionFailure("Error during encoding WebSocket message")
+                return .none
             }
-            else {
-                fatalError()
-            }
+
         case .uncodable(let data):
             message = URLSessionWebSocketTask.Message.data(data)
         }
 
-        webSocketTask.send(message, completionHandler: {
-            error in
-            if let error = error {
-                if  self.webSocketTask.closeCode != .invalid {
-                    //closed!
-                }
-                Swift.print("ERROR on send \(error)")
-            }
+        webSocketTask.send(message, completionHandler: { error in
+            guard let error = error else { return }
+            os_log(.info, log: .module, "Unable to send websocket message: %@", error.description)
         })
+
         return .unlimited
     }
 
@@ -103,3 +102,18 @@ extension CodableWebSocket {
     }
 }
 
+extension OSLog {
+    /// OSLog instance for CodableWebSocket module
+    static let module: OSLog = OSLog(subsystem: "CodableWebSocket", category: .pointsOfInterest)
+}
+
+extension Error {
+    var ns: NSError {
+        self as NSError
+    }
+
+    /// Usually it's more informative than Error.localizedDescription
+    var description: String {
+        ns.description
+    }
+}
