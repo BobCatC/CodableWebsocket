@@ -79,26 +79,26 @@ public final class CodableWebSocket<T:Codable>:Publisher,Subscriber {
 
         webSocketTask.send(message, completionHandler: { error in
             guard let error = error else { return }
-            os_log(.info, log: .module, "Unable to send websocket message: %@", error.description)
+            os_log(.error, log: .module, "Unable to send websocket message: %@", error.description)
         })
 
         return .unlimited
     }
 
     public func receive(completion: Subscribers.Completion<Error>) {
-        Swift.print("Completion")
+        os_log(.info, log: .module, "Completion")
     }
-    
 }
 
 extension CodableWebSocket {
     public func codable()-> AnyPublisher<T, CodableWebSocket<T>.Failure> {
-        return compactMap{ result -> T? in
-            guard case  Result<SocketData<T>,Error>.success(let socketdata) = result,
-                  case SocketData.codable(let codable) = socketdata
+        return compactMap { result -> T? in
+            guard case .success(let socketdata) = result,
+                  case .codable(let codable) = socketdata
             else { return nil }
             return codable
-        }.eraseToAnyPublisher()
+        }
+        .eraseToAnyPublisher()
     }
 }
 
