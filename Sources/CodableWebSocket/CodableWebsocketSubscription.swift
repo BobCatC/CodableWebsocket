@@ -40,7 +40,15 @@ final class CodableWebsocketSubscription<SubscriberType: Subscriber, IncomingTyp
         let newResult = result.map { message -> SocketData<IncomingType> in
             switch message {
             case .string(let str):
-                return .message(str)
+                guard let data = str.data(using: .utf8) else { return .message(str) }
+                do {
+                    let decoded = try JSONDecoder().decode(IncomingType.self, from: data)
+                    return .codable(decoded)
+                } catch {
+                    os_log(.info, log: .module, "Unable to decode %@ from string message", String(describing: IncomingType.self))
+                    return .message(str)
+                }
+
             case .data(let data):
                 do {
                     let decoded = try JSONDecoder().decode(IncomingType.self, from: data)
